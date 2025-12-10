@@ -27,6 +27,9 @@ setup(
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
-        'console_scripts': [],
+        'console_scripts': [
+            # Eski node varsa kalsın, altına bunu ekle:
+            'empty_map_pub = rover_bringup.empty_map:main',
+        ],
     },
 )

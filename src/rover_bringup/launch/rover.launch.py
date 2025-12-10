@@ -31,6 +31,12 @@ def generate_launch_description():
             output='screen',
             parameters=[ekf_config]
         ),
+        Node(
+            package='rover_bringup',
+            executable='empty_map_pub',
+            name='empty_map_publisher',
+            output='screen'
+        ),
 
         # 3. Sahte Harita Bağlantısı (Map -> Odom)
         # Lidar/SLAM olmadığı için haritayı odometriye çiviliyoruz.

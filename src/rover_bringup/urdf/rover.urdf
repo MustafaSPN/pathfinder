@@ -4,11 +4,16 @@
   <material name="blue">
     <color rgba="0 0 0.8 1"/>
   </material>
+  
+  <material name="black">
+    <color rgba="0 0 0 1"/>
+  </material>
 
   <link name="base_link">
     <visual>
       <geometry>
-        <box size="0.3 0.2 0.1"/> </geometry>
+        <box size="0.5 0.4 0.17"/>
+      </geometry>
       <material name="blue"/>
     </visual>
   </link>
@@ -21,11 +26,37 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <link name="laser_frame"/>
+  <link name="left_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="0.096" length="0.07"/>
+      </geometry>
+      <material name="black"/>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+    </visual>
+  </link>
 
-  <joint name="laser_joint" type="fixed">
+  <joint name="left_wheel_joint" type="fixed">
     <parent link="base_link"/>
-    <child link="laser_frame"/>
-    <origin xyz="0.1 0 0.08" rpy="0 0 0"/> </joint>
+    <child link="left_wheel"/>
+    <origin xyz="0.15 0.235 -0.035" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/> </joint>
+
+  <link name="right_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="0.096" length="0.07"/>
+      </geometry>
+      <material name="black"/>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="right_wheel_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="right_wheel"/>
+    <origin xyz="0.15 -0.235 -0.035" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
 
 </robot>
