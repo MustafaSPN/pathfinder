@@ -37,8 +37,26 @@ def generate_launch_description():
             name='empty_map_publisher',
             output='screen'
         ),
+        # 4. SWEGEO RTK GPS SÜRÜCÜSÜ (Bağımsız Paketten)
+        Node(
+            package='swegeo_driver',      # <-- Yeni paket adı
+            executable='swegeo_node',    # <-- setup.py'da verdiğimiz isim
+            name='swegeo_gps_driver',
+            output='screen',
+            parameters=[{
+                'port': '/dev/ttyUSB0',  # GPS'in bağlı olduğu port (Kontrol et!)
+                'baudrate': 115200,
+                'ntrip_enable': True,
+                # NTRIP Bilgilerini Buraya Gir:
+                'ntrip_host': '212.156.70.42', 
+                'ntrip_port': 2101,
+                'ntrip_mountpoint': 'VRSRTCM34',
+                'ntrip_user': 'K0746003602',
+                'ntrip_pass': 'GXihcS'
+            }]
+        ),
 
-        # 3. Sahte Harita Bağlantısı (Map -> Odom)
+        # 5. Sahte Harita Bağlantısı (Map -> Odom)
         # Lidar/SLAM olmadığı için haritayı odometriye çiviliyoruz.
         Node(
             package='tf2_ros',
