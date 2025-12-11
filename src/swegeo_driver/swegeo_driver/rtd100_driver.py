@@ -16,7 +16,7 @@ class rtd100_driver(Node):
         # --- AYARLAR ---
         self.declare_parameter('port', '/dev/ttyUSB0')
         self.declare_parameter('baudrate', 115200)
-        self.declare_parameter('frame_id', 'gps_link')
+        self.declare_parameter('frame_id', 'base_link')
         
         # NTRIP Ayarları
         self.declare_parameter('ntrip_enable', False)
@@ -187,7 +187,7 @@ class rtd100_driver(Node):
 
             if sol_stat != "SOL_COMPUTED": return
 
-            yaw_deg = 90.0 - heading_deg
+            yaw_deg = 90.0 - heading_deg 
             if yaw_deg < -180.0: yaw_deg += 360.0
             if yaw_deg > 180.0:  yaw_deg -= 360.0
             
@@ -201,6 +201,7 @@ class rtd100_driver(Node):
             imu_msg.orientation.y = 0.0
             imu_msg.orientation.z = math.sin(yaw_rad / 2.0)
             imu_msg.orientation.w = math.cos(yaw_rad / 2.0)
+            self.get_logger().info(f"Heading: {heading_deg:.2f}°, Yaw: {yaw_deg:.2f}°")
 
             cov = heading_std ** 2
             imu_msg.orientation_covariance = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, cov]
