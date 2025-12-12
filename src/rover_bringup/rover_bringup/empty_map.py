@@ -49,7 +49,10 @@ class EmptyMapPublisher(Node):
         msg.info.origin.position.x = -(self.map_size_m / 2.0)
         msg.info.origin.position.y = -(self.map_size_m / 2.0)
         msg.info.origin.position.z = 0.0
-        msg.info.origin.orientation.w = 1.0
+        msg.info.origin.orientation.x = 0.0
+        msg.info.origin.orientation.y = 0.0
+        msg.info.origin.orientation.z = 0.0 
+        msg.info.origin.orientation.w = 1.0 
 
         # Harita Verisi (0: Boş, 100: Dolu, -1: Bilinmiyor)
         # 100x100m alanı "0" (Boş) ile dolduruyoruz.

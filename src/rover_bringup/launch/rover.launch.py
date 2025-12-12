@@ -23,24 +23,29 @@ def generate_launch_description():
             parameters=[{'robot_description': robot_desc}]
         ),
 
-        # ---------------------------------------------
-        # 2. NAVSAT TRANSFORM (GPS -> Odometry Çevirici)
-        # ---------------------------------------------
-        # Girdi: /fix (GPS), /gps/imu (Heading)
-        # Çıktı: /odometry/gps (Metre cinsinden GPS verisi)
         Node(
-            package='robot_localization',
-            executable='navsat_transform_node',
-            name='navsat_transform',          # YAML ile aynı olsun
+            package='rover_bringup',
+            executable='empty_map_pub',
+            name='empty_map_publisher',
+            output='screen'
+        ),
+        # 5. SWEGEO RTK GPS SÜRÜCÜSÜ (Bağımsız Paketten)
+        Node(
+            package='swegeo_driver',      # <-- Yeni paket adı
+            executable='swegeo_node',    # <-- setup.py'da verdiğimiz isim
+            name='swegeo_gps_driver',
             output='screen',
-            parameters=[ekf_config],
-            remappings=[
-                ('imu/data', 'gps/imu'),      # IMU input
-                ('gps/fix', 'fix'),           # GPS input
-                ('odometry/filtered', 'odometry/local'),  # lokal EKF output'u
-                ('odometry/gps', 'odometry/gps'),         # (opsiyonel) output açıkça belirt
-            ],
-            arguments=['--ros-args', '--log-level', 'warn']
+            parameters=[{
+                'port': '/dev/ttyUSB0',  # GPS'in bağlı olduğu port (Kontrol et!)
+                'baudrate': 115200,
+                'ntrip_enable': True,
+                # NTRIP Bilgilerini Buraya Gir:
+                'ntrip_host': '212.156.70.42', 
+                'ntrip_port': 2101,
+                'ntrip_mountpoint': 'VRSRTCM34',
+                'ntrip_user': 'K0746003602',
+                'ntrip_pass': 'GXihcS'
+            }]
         ),
 
         # ---------------------------------------------
@@ -74,28 +79,23 @@ def generate_launch_description():
                 ('odometry/filtered', '/odometry/global') # Çıktı topic ismini özelleştiriyoruz
             ]
         ),
+        # ---------------------------------------------
+        # 2. NAVSAT TRANSFORM (GPS -> Odometry Çevirici)
+        # ---------------------------------------------
+        # Girdi: /fix (GPS), /gps/imu (Heading)
+        # Çıktı: /odometry/gps (Metre cinsinden GPS verisi)
         Node(
-            package='rover_bringup',
-            executable='empty_map_pub',
-            name='empty_map_publisher',
-            output='screen'
-        ),
-        # 5. SWEGEO RTK GPS SÜRÜCÜSÜ (Bağımsız Paketten)
-        Node(
-            package='swegeo_driver',      # <-- Yeni paket adı
-            executable='swegeo_node',    # <-- setup.py'da verdiğimiz isim
-            name='swegeo_gps_driver',
+            package='robot_localization',
+            executable='navsat_transform_node',
+            name='navsat_transform',          # YAML ile aynı olsun
             output='screen',
-            parameters=[{
-                'port': '/dev/ttyUSB0',  # GPS'in bağlı olduğu port (Kontrol et!)
-                'baudrate': 115200,
-                'ntrip_enable': True,
-                # NTRIP Bilgilerini Buraya Gir:
-                'ntrip_host': '212.156.70.42', 
-                'ntrip_port': 2101,
-                'ntrip_mountpoint': 'VRSRTCM34',
-                'ntrip_user': 'K0746003602',
-                'ntrip_pass': 'GXihcS'
-            }]
-        ),
+            parameters=[ekf_config],
+            remappings=[
+                ('imu/data', '/gps/imu'),      # IMU input
+                ('gps/fix', '/fix'),           # GPS input
+                ('odometry/filtered', '/odometry/local'),  # lokal EKF output'u
+                ('odometry/gps', '/odometry/gps'),         # (opsiyonel) output açıkça belirt
+            ],
+            arguments=['--ros-args', '--log-level', 'warn']
+        )
     ])

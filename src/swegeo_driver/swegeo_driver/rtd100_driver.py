@@ -96,7 +96,7 @@ class rtd100_driver(Node):
                                 try:
                                     s.sendall(self.latest_gga.encode())
                                     last_gga_time = current_time
-                                    # self.get_logger().debug("Guncel GGA sunucuya iletildi.")
+                                    self.get_logger().debug(f"Guncel GGA sunucuya iletildi {self.latest_gga.strip()}.")
                                 except Exception as e:
                                     self.get_logger().warn(f"GGA Gonderilemedi: {e}")
                                     break
@@ -137,9 +137,11 @@ class rtd100_driver(Node):
                     # --- YÖNTEM 2 EKLENTİSİ ---
                     # NTRIP sunucusu \r\n ile biten veri ister. strip() sildiği için geri ekliyoruz.
                     self.latest_gga = line + "\r\n" 
-                    self.parse_gga(line)
+                    # self.parse_gga(line)
                 elif "#HEADINGA" in line:
                     self.parse_headinga(line)
+                elif "#BESTPOSA" in line:
+                    self.parse_bestposa(line)
         except Exception:
             pass
 
@@ -164,6 +166,9 @@ class rtd100_driver(Node):
             elif qual == 1:
                 ros_msg.status.status = 0 # Single
                 cov = 2.5
+            elif qual == 0 or qual == 6:
+                self.get_logger().info("GPS Fix Yok")
+                pass
             else:
                 ros_msg.status.status = -1 # No Fix
                 cov = 10000.0
@@ -174,6 +179,120 @@ class rtd100_driver(Node):
         except Exception:
             self.get_logger().error(f"GGA Parse Hatasi: {line}")
             pass
+
+    def _safe_float(self, s: str, default=None):
+        try:
+            s = s.strip().strip('"')
+            return float(s)
+        except Exception:
+            return default
+
+    def parse_bestposa(self, line: str):
+        try:
+            # '#BESTPOSA,...;payload*checksum' formatı
+            if ';' not in line:
+                return
+
+            payload = line.split(';', 1)[1]
+
+            # checksum varsa kopar: '...*ABCDEF'
+            if '*' in payload:
+                payload = payload.split('*', 1)[0]
+
+            data = payload.split(',')
+            if len(data) < 10:
+                self.get_logger().warn(f"BESTPOSA payload too short: {payload}")
+                return
+
+            sol_status = data[0].strip()      # SOL_COMPUTED / INSUFFICIENT_OBS
+            pos_type   = data[1].strip()      # RTK_FIXED / RTK_FLOAT / NONE
+
+            # ✅ önce sol_status kontrolü (patlamayı önler)
+            if sol_status != "SOL_COMPUTED":
+                # Debug istersen aç:
+                # self.get_logger().debug(f"BESTPOSA ignored: {sol_status},{pos_type}")
+                return
+
+            # Bu formatta: [2]=lat, [3]=lon, [4]=hgt
+            latitude  = self._safe_float(data[2])
+            longitude = self._safe_float(data[3])
+            height    = self._safe_float(data[4])
+
+            # std alanları bu tip BESTPOSA'da genelde şuralarda:
+            # ... WGS84, undulation, datum_id? ... sonra lat_std, lon_std, hgt_std
+            # Senin örneğinde:
+            # ..., WGS84,0.0000,0.0000,0.0000,"",0.000,0.003,0,0,...
+            # Burada 0.000 ve 0.003 gibi std'ler var ama indeks cihazına göre değişebilir.
+            #
+            # En güvenlisi: payload içinden std adaylarını "sonlarda küçük değerler" olarak seçmek.
+            # Ama basit olsun diye: önce bilinen indeksleri dene, yoksa fallback koy.
+            lat_std = None
+            lon_std = None
+            hgt_std = None
+
+            # Deneme-1: NovAtel benzeri layout (bazı cihazlarda [10],[11],[12])
+            if len(data) > 12:
+                lat_std = self._safe_float(data[10])
+                lon_std = self._safe_float(data[11])
+                hgt_std = self._safe_float(data[12])
+
+            # Deneme-2: Senin örneğe benzer layout: std'ler "" dan sonra geliyor olabilir
+            # "" alanını bulup sonraki 3 sayıyı almayı dene
+            if lat_std is None or lon_std is None:
+                try:
+                    empty_idx = data.index('""') if '""' in data else data.index('""'.strip())
+                except ValueError:
+                    empty_idx = None
+                if empty_idx is not None and len(data) > empty_idx + 3:
+                    lat_std2 = self._safe_float(data[empty_idx + 1])
+                    lon_std2 = self._safe_float(data[empty_idx + 2])
+                    hgt_std2 = self._safe_float(data[empty_idx + 3])
+                    # sadece mantıklıysa al (None değilse)
+                    if lat_std2 is not None and lon_std2 is not None:
+                        lat_std, lon_std, hgt_std = lat_std2, lon_std2, (hgt_std2 if hgt_std2 is not None else 5.0)
+
+            # Fallback: std bulamazsak makul bir şey koy
+            if lat_std is None or lon_std is None:
+                # RTK_FIXED ise çok küçük, değilse daha büyük
+                if pos_type == "RTK_FIXED":
+                    lat_std, lon_std, hgt_std = 0.02, 0.02, 0.05
+                elif pos_type == "RTK_FLOAT":
+                    lat_std, lon_std, hgt_std = 0.20, 0.20, 0.50
+                else:
+                    lat_std, lon_std, hgt_std = 2.0, 2.0, 5.0
+
+            # NavSatFix oluştur
+            ros_msg = NavSatFix()
+            ros_msg.header.stamp = self.get_clock().now().to_msg()
+            ros_msg.header.frame_id = self.frame_id
+            ros_msg.latitude = float(latitude)
+            ros_msg.longitude = float(longitude)
+            ros_msg.altitude = float(height)
+
+            # status mapping
+            if pos_type == "RTK_FIXED":
+                ros_msg.status.status = NavSatStatus.STATUS_GBAS_FIX
+            elif pos_type == "RTK_FLOAT":
+                ros_msg.status.status = NavSatStatus.STATUS_SBAS_FIX
+            else:
+                ros_msg.status.status = NavSatStatus.STATUS_FIX
+            ros_msg.status.service = NavSatStatus.SERVICE_GPS
+
+            cov_lat = float(lat_std) ** 2
+            cov_lon = float(lon_std) ** 2
+            cov_alt = float(hgt_std) ** 2
+
+            ros_msg.position_covariance = [
+                cov_lat, 0.0,    0.0,
+                0.0,    cov_lon, 0.0,
+                0.0,    0.0,    cov_alt
+            ]
+            ros_msg.position_covariance_type = NavSatFix.COVARIANCE_TYPE_DIAGONAL_KNOWN
+
+            self.fix_pub.publish(ros_msg)
+
+        except Exception as e:
+            self.get_logger().error(f"BESTPOSA parse hatası: {e} line={line[:120]}")
 
     def parse_headinga(self, line):
         try:
