@@ -8,11 +8,10 @@ def generate_launch_description():
     
     # Dosya yollarını bul
     urdf_file = os.path.join(get_package_share_directory(pkg_name), 'urdf', 'rover.urdf')
-    ekf_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'dual_ekf_navsat.yaml')
     ekf_filter_node_odom_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'ekf_filter_node_odom.yaml')
     ekf_filter_node_map_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'ekf_filter_node_map.yaml')
     navsat_transform_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'navsat_transform.yaml')
-
+    twist_mux_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'twist_mux.yaml')
 
     with open(urdf_file, 'r') as infp:
         robot_desc = infp.read()
@@ -26,7 +25,13 @@ def generate_launch_description():
             output='screen',
             parameters=[{'robot_description': robot_desc}]
         ),
-
+        Node(
+            package='twist_mux',
+            executable='twist_mux',
+            name='twist_mux',
+            output='screen',
+            parameters=[twist_mux_config]
+        ),
         Node(
             package='rover_bringup',
             executable='empty_map_pub',
@@ -81,6 +86,11 @@ def generate_launch_description():
             parameters=[navsat_transform_config],
             respawn=True,         # Hata verince tekrar başlat
             respawn_delay=4.0,    # Çökünce hemen açma, 4 saniye bekle (GPS iyice kendine gelsin)
+            remappings=[
+                ('imu', '/gps/imu'),
+                ('gps/fix', '/fix'),
+                ('odometry/filtered', '/odometry/local')
+                ],
             arguments=['--ros-args', '--log-level', 'warn']
         ),
         # ---------------------------------------------
