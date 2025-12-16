@@ -9,6 +9,10 @@ def generate_launch_description():
     # Dosya yollarını bul
     urdf_file = os.path.join(get_package_share_directory(pkg_name), 'urdf', 'rover.urdf')
     ekf_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'dual_ekf_navsat.yaml')
+    ekf_filter_node_odom_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'ekf_filter_node_odom.yaml')
+    ekf_filter_node_map_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'ekf_filter_node_map.yaml')
+    navsat_transform_config = os.path.join(get_package_share_directory(pkg_name), 'config', 'navsat_transform.yaml')
+
 
     with open(urdf_file, 'r') as infp:
         robot_desc = infp.read()
@@ -58,12 +62,27 @@ def generate_launch_description():
             executable='ekf_node',
             name='ekf_filter_node_odom', # YAML dosyasındaki başlık ile AYNI OLMALI
             output='screen',
-            parameters=[ekf_config],
+            parameters=[ekf_filter_node_odom_config],
             remappings=[
                 ('odometry/filtered', '/odometry/local') # Çıktı topic ismini özelleştiriyoruz
             ]
         ),
+        # ---------------------------------------------
+        # 2. NAVSAT TRANSFORM (GPS -> Odometry Çevirici)
+        # ---------------------------------------------
+        # Girdi: /fix (GPS), /gps/imu (Heading)
 
+        # Çıktı: /odometry/gps (Metre cinsinden GPS verisi)
+        Node(
+            package='robot_localization',
+            executable='navsat_transform_node',
+            name='navsat_transform_node',          # YAML ile aynı olsun
+            output='screen',
+            parameters=[navsat_transform_config],
+            respawn=True,         # Hata verince tekrar başlat
+            respawn_delay=4.0,    # Çökünce hemen açma, 4 saniye bekle (GPS iyice kendine gelsin)
+            arguments=['--ros-args', '--log-level', 'warn']
+        ),
         # ---------------------------------------------
         # 4. GLOBAL EKF (Harita Konumu - Map Frame)
         # ---------------------------------------------
@@ -74,28 +93,9 @@ def generate_launch_description():
             executable='ekf_node',
             name='ekf_filter_node_map', # YAML dosyasındaki başlık ile AYNI OLMALI
             output='screen',
-            parameters=[ekf_config],
+            parameters=[ekf_filter_node_map_config],
             remappings=[
                 ('odometry/filtered', '/odometry/global') # Çıktı topic ismini özelleştiriyoruz
             ]
-        ),
-        # ---------------------------------------------
-        # 2. NAVSAT TRANSFORM (GPS -> Odometry Çevirici)
-        # ---------------------------------------------
-        # Girdi: /fix (GPS), /gps/imu (Heading)
-        # Çıktı: /odometry/gps (Metre cinsinden GPS verisi)
-        Node(
-            package='robot_localization',
-            executable='navsat_transform_node',
-            name='navsat_transform',          # YAML ile aynı olsun
-            output='screen',
-            parameters=[ekf_config],
-            remappings=[
-                ('imu/data', '/gps/imu'),      # IMU input
-                ('gps/fix', '/fix'),           # GPS input
-                ('odometry/filtered', '/odometry/local'),  # lokal EKF output'u
-                ('odometry/gps', '/odometry/gps'),         # (opsiyonel) output açıkça belirt
-            ],
-            arguments=['--ros-args', '--log-level', 'warn']
         )
     ])

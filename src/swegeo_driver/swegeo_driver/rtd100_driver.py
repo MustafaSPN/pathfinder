@@ -189,6 +189,7 @@ class rtd100_driver(Node):
 
     def parse_bestposa(self, line: str):
         try:
+            # self.get_logger().info(f"BESTPOSA alindi: {line}")
             # '#BESTPOSA,...;payload*checksum' formatı
             if ';' not in line:
                 return
@@ -217,7 +218,9 @@ class rtd100_driver(Node):
             latitude  = self._safe_float(data[2])
             longitude = self._safe_float(data[3])
             height    = self._safe_float(data[4])
-
+            if latitude is None or latitude == 0.0 or longitude is None or longitude == 0.0 or height is None or height == 0.0:
+                self.get_logger().warn(f"BESTPOSA konum verisi hatali: {payload}")
+                return
             # std alanları bu tip BESTPOSA'da genelde şuralarda:
             # ... WGS84, undulation, datum_id? ... sonra lat_std, lon_std, hgt_std
             # Senin örneğinde:
@@ -231,10 +234,10 @@ class rtd100_driver(Node):
             hgt_std = None
 
             # Deneme-1: NovAtel benzeri layout (bazı cihazlarda [10],[11],[12])
-            if len(data) > 12:
-                lat_std = self._safe_float(data[10])
-                lon_std = self._safe_float(data[11])
-                hgt_std = self._safe_float(data[12])
+            if len(data) > 9:
+                lat_std = self._safe_float(data[7])
+                lon_std = self._safe_float(data[8])
+                hgt_std = self._safe_float(data[9])
 
             # Deneme-2: Senin örneğe benzer layout: std'ler "" dan sonra geliyor olabilir
             # "" alanını bulup sonraki 3 sayıyı almayı dene
@@ -252,14 +255,14 @@ class rtd100_driver(Node):
                         lat_std, lon_std, hgt_std = lat_std2, lon_std2, (hgt_std2 if hgt_std2 is not None else 5.0)
 
             # Fallback: std bulamazsak makul bir şey koy
-            if lat_std is None or lon_std is None:
-                # RTK_FIXED ise çok küçük, değilse daha büyük
-                if pos_type == "RTK_FIXED":
-                    lat_std, lon_std, hgt_std = 0.02, 0.02, 0.05
-                elif pos_type == "RTK_FLOAT":
-                    lat_std, lon_std, hgt_std = 0.20, 0.20, 0.50
-                else:
-                    lat_std, lon_std, hgt_std = 2.0, 2.0, 5.0
+                if lat_std is None or lon_std is None:
+                    # RTK_FIXED ise çok küçük, değilse daha büyük
+                    if pos_type == "RTK_FIXED":
+                        lat_std, lon_std, hgt_std = 0.02, 0.02, 0.05
+                    elif pos_type == "RTK_FLOAT":
+                        lat_std, lon_std, hgt_std = 0.20, 0.20, 0.50
+                    else:
+                        lat_std, lon_std, hgt_std = 2.0, 2.0, 5.0
 
             # NavSatFix oluştur
             ros_msg = NavSatFix()
@@ -268,7 +271,7 @@ class rtd100_driver(Node):
             ros_msg.latitude = float(latitude)
             ros_msg.longitude = float(longitude)
             ros_msg.altitude = float(height)
-
+            
             # status mapping
             if pos_type == "RTK_FIXED":
                 ros_msg.status.status = NavSatStatus.STATUS_GBAS_FIX
@@ -302,7 +305,7 @@ class rtd100_driver(Node):
             
             sol_stat = data[0]
             heading_deg = float(data[3])
-            heading_std = float(data[6])
+            heading_std_deg = float(data[6])
 
             if sol_stat != "SOL_COMPUTED": return
 
@@ -320,10 +323,31 @@ class rtd100_driver(Node):
             imu_msg.orientation.y = 0.0
             imu_msg.orientation.z = math.sin(yaw_rad / 2.0)
             imu_msg.orientation.w = math.cos(yaw_rad / 2.0)
-            self.get_logger().info(f"Heading: {heading_deg:.2f}°, Yaw: {yaw_deg:.2f}°")
+            # self.get_logger().info(f"Heading: {heading_deg:.2f}°, Yaw: {yaw_deg:.2f}°")
 
-            cov = heading_std ** 2
-            imu_msg.orientation_covariance = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, cov]
+            std_rad = max(math.radians(heading_std_deg), math.radians(0.2))  # min 0.2°
+            cov = std_rad ** 2
+            # self.get_logger().info(f"Heading Std: {heading_std_deg:.2f}°, Cov: {cov:.6f} rad²")
+            imu_msg.orientation_covariance = [
+                                                99999.0, 0.0,     0.0,
+                                                0.0,     99999.0, 0.0,
+                                                0.0,     0.0,     cov
+                                            ]
+
+            # Gyro YOK: spec'e göre [0] = -1 yap
+            imu_msg.angular_velocity_covariance = [
+                                                    -1.0, 0.0, 0.0,
+                                                    0.0, 0.0, 0.0,
+                                                    0.0, 0.0, 0.0
+                                                ]
+
+            # Accel YOK: spec'e göre [0] = -1 yap
+            imu_msg.linear_acceleration_covariance = [
+                                                        -1.0, 0.0, 0.0,
+                                                        0.0, 0.0, 0.0,
+                                                        0.0, 0.0, 0.0
+                                                    ]
+
             
             self.imu_pub.publish(imu_msg)
         except Exception:

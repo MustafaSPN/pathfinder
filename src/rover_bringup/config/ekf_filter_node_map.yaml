@@ -1,0 +1,73 @@
+ekf_filter_node_map:
+  ros__parameters:
+    frequency: 10.0               # 5 Hz GPS/IMU için 10 Hz iyi
+    sensor_timeout: 0.6           # 5 Hz -> 0.2s periyod; jitter için pay
+    two_d_mode: true
+
+    transform_time_offset: 0.0
+    transform_timeout: 0.2
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: map
+
+    publish_tf: true              # map->odom TF için gerekli
+    publish_acceleration: false
+    print_diagnostics: true
+
+    # ======================================================
+    # 1) ODOM (ekf_filter_node_odom çıktısı)
+    #    Buradan sadece hızları alıyoruz (vx, yaw_rate)
+    # ======================================================
+    odom0: /odometry/local
+    odom0_queue_size: 10
+    odom0_nodelay: true
+
+    # [x, y, z, roll, pitch, yaw,  vx, vy, vz,  vroll, vpitch, vyaw,  ax, ay, az]
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, true,
+                   false, false, false]
+
+    odom0_differential: false
+    odom0_relative: false
+
+    # ======================================================
+    # 2) GPS (navsat_transform_node çıktısı: /odometry/gps)
+    #    Buradan mutlak pozisyon: x,y alıyoruz (z yok)
+    # ======================================================
+    gps0: /odometry/gps
+    gps0_queue_size: 10
+    gps0_nodelay: true
+
+    gps0_config: [true,  true,  false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, false]
+
+    gps0_differential: false
+    gps0_relative: false
+
+    # ======================================================
+    # 3) GNSS Heading IMU (yaw-only orientation)
+    #    Buradan sadece yaw orientation alıyoruz
+    # ======================================================
+    imu0: /gps/imu
+    imu0_queue_size: 10
+    imu0_nodelay: true
+
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, false,
+                  false, false, false]
+
+    imu0_differential: false
+    imu0_relative: false
+    imu0_remove_gravitational_acceleration: false
+
+    # Control kapalı (encoder var)
+    use_control: false

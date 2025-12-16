@@ -1,0 +1,24 @@
+navsat_transform:
+  ros__parameters:
+    frequency: 10.0
+    delay: 0.0
+
+    # We use GNSS heading (not magnetometer)
+    magnetic_declination_radians: 0.0
+    yaw_offset: 0.0
+
+    # Ground vehicle
+    zero_altitude: true
+
+    broadcast_utm_transform: false
+    publish_filtered_gps: false
+    wait_for_datum: false
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+
+    # Inputs
+    gps_topic: /fix
+    imu_topic: /gps/imu
+    odometry_topic: /odometry/local

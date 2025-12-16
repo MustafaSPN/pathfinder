@@ -1,0 +1,39 @@
+ekf_filter_node_odom:
+  ros__parameters:
+    # Çalışma hızı: sensör 10 Hz → filtreyi daha hızlı (örn. 20 Hz) çalıştırmak iyi olur
+    frequency: 20.0
+    sensor_timeout: 0.3
+    two_d_mode: true
+
+    # TF / zaman
+    transform_time_offset: 0.0
+    transform_timeout: 0.2
+
+    # Frame'ler
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    publish_tf: true
+    publish_acceleration: false
+
+    # =============== INPUT: ESP WHEEL ODOM ===============
+    odom0: /odom_esp
+    odom0_queue_size: 10
+    odom0_nodelay: true
+
+    # Sadece TWIST: vx ve yaw_rate (angular z) fuse edilecek
+    # [x, y, z, roll, pitch, yaw,  vx, vy, vz,  vroll, vpitch, vyaw,  ax, ay, az]
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, true,
+                   false, false, false]
+
+    # Pose'u bu kaynaktan almayacağız
+    odom0_differential: false
+    odom0_relative: false
+
+    # Control kullanılmıyorsa kapalı kalsın
+    use_control: false
