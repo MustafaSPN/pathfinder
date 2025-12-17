@@ -373,8 +373,8 @@ class WebBridgeNode(Node):
             pose = PoseStamped()
             pose.header.frame_id = 'map'
             pose.header.stamp = self.get_clock().now().to_msg()
-            pose.pose.position.x = -map_y
-            pose.pose.position.y = -map_x
+            pose.pose.position.x = map_x
+            pose.pose.position.y = map_y
             pose.pose.orientation.w = 1.0 # Varsayılan yönelim
             
             goal_msg.poses.append(pose)

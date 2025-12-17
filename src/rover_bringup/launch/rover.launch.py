@@ -83,7 +83,8 @@ def generate_launch_description():
             executable='navsat_transform_node',
             name='navsat_transform_node',          # YAML ile aynı olsun
             output='screen',
-            parameters=[navsat_transform_config],
+            parameters=[navsat_transform_config,
+            {'yaw_offset': 0.0}],  # İhtiyaca göre ayarla
             respawn=True,         # Hata verince tekrar başlat
             respawn_delay=4.0,    # Çökünce hemen açma, 4 saniye bekle (GPS iyice kendine gelsin)
             remappings=[
