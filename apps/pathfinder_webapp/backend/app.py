@@ -35,11 +35,24 @@ def root():
     return FileResponse(str(FRONTEND_DIR / "index.html"))
 
 
-def quat_to_yaw(qx, qy, qz, qw) -> float:
-    siny_cosp = 2.0 * (qw * qz + qx * qy)
-    cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
-    return math.atan2(siny_cosp, cosy_cosp)
+def quat_to_heading(x, y, z, w):
+    """
+    Quaternion (ENU, ROS standard) → Gerçek pusula heading (0–360°)
+    """
 
+    # 1️⃣ Quaternion → yaw (RAD)
+    yaw = math.atan2(
+        2.0 * (w*z + x*y),
+        1.0 - 2.0 * (y*y + z*z)
+    )
+
+    # 2️⃣ Yaw → derece
+    yaw_deg = math.degrees(yaw)
+
+    # 3️⃣ Yaw → Heading dönüşümü
+    heading_deg = (90.0 - yaw_deg) % 360.0
+
+    return heading_deg
 
 class WebBridgeNode(Node):
     def __init__(self):
@@ -55,7 +68,7 @@ class WebBridgeNode(Node):
         self.get_logger().info("FromLL Service Client initialized.")
         self._lat: Optional[float] = None
         self._lon: Optional[float] = None
-        self._yaw: float = 0.0
+        self._heading_deg: float = 0.0
         self._vx: float = 0.0
         self._vyaw: float = 0.0
 
@@ -155,11 +168,12 @@ class WebBridgeNode(Node):
                 self._trace = self._trace[-self._trace_max:]
     def _on_heading(self, msg: Imu):
         q = msg.orientation
-        self._yaw = quat_to_yaw(q.x, q.y, q.z, q.w) - 90.0
+        heading_deg = quat_to_heading(q.x, q.y, q.z, q.w)
+        self._heading_deg = heading_deg
 
     def _on_odom(self, msg: Odometry):
         q = msg.pose.pose.orientation
-        # self._yaw = quat_to_yaw(q.x, q.y, q.z, q.w)
+        # self._heading_deg = quat_to_heading_deg(q.x, q.y, q.z, q.w)
         self._vx = float(msg.twist.twist.linear.x)
         self._vyaw = float(msg.twist.twist.angular.z)
 
@@ -177,7 +191,7 @@ class WebBridgeNode(Node):
     def telemetry(self) -> Dict[str, Any]:
         lat = self._lat if self._lat is not None else 0.0
         lon = self._lon if self._lon is not None else 0.0
-        yaw_deg = (math.degrees(self._yaw) % 360.0)
+        heading_deg = self._heading_deg
 
         # Compute GPS label and age; report 'No GPS' if last message older than 1s
         gps_label = (self._gps_status_label if self._gps_status_label is not None else self._gps_status_text(self._gps_status_code))
@@ -193,7 +207,7 @@ class WebBridgeNode(Node):
         return {
             "lat": lat,
             "lon": lon,
-            "yaw_deg": yaw_deg,
+            "yaw_deg": heading_deg,
             "vx": self._vx,
             "vyaw": self._vyaw,
             "gps_status": {
@@ -359,8 +373,8 @@ class WebBridgeNode(Node):
             pose = PoseStamped()
             pose.header.frame_id = 'map'
             pose.header.stamp = self.get_clock().now().to_msg()
-            pose.pose.position.x = map_x
-            pose.pose.position.y = map_y
+            pose.pose.position.x = -map_y
+            pose.pose.position.y = -map_x
             pose.pose.orientation.w = 1.0 # Varsayılan yönelim
             
             goal_msg.poses.append(pose)

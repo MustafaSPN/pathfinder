@@ -822,17 +822,32 @@ Example:
 
   // Bigger, more visible rotating triangle marker (red fill + black border)
   function makeArrowIcon(deg) {
-    const size = 40;
-    // Two layered CSS triangles: a slightly larger black one behind and a red one in front
-    const html = `
-      <div style="width:0;height:0;position:relative;transform:rotate(${deg}deg);transform-origin:50% 70%;">
-        <div style="position:absolute;left:-20px;top:-6px;width:0;height:0;border-left:20px solid transparent;border-right:20px solid transparent;border-bottom:38px solid #000;"></div>
-        <div style="position:absolute;left:-18px;top:-4px;width:0;height:0;border-left:18px solid transparent;border-right:18px solid transparent;border-bottom:34px solid #ef4444;filter: drop-shadow(0 10px 14px rgba(0,0,0,0.65));"></div>
-      </div>`;
+  const size = 40;
+  const half = size / 2;
 
-    // Anchor near the bottom tip so the triangle tip sits on the robot coordinate
-    return L.divIcon({ html, className: "", iconSize: [size,size], iconAnchor: [Math.floor(size/2), Math.floor(size*0.9)] });
-  }
+  // SVG triangle centered in the icon box.
+  // Black outline + red fill. Rotation around exact center => no zoom drift.
+  const html = `
+    <div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;">
+      <svg width="${size}" height="${size}" viewBox="0 0 100 100"
+           style="transform:rotate(${deg}deg); transform-origin: 50% 50%;
+                  filter: drop-shadow(0 10px 14px rgba(0,0,0,0.65));">
+        <!-- outer (black) -->
+        <polygon points="50,8 92,92 8,92" fill="#000000"></polygon>
+        <!-- inner (red) slightly inset for border effect -->
+        <polygon points="50,14 87,90 13,90" fill="#ef4444"></polygon>
+      </svg>
+    </div>`;
+
+  // Center of icon sits exactly on the LatLng point
+  return L.divIcon({
+    html,
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [half, half]
+  });
+}
+
 
   let robot = { lat: 41.01, lon: 28.97, yaw_deg: 0 };
   const robotMarker = L.marker([robot.lat, robot.lon], { icon: makeArrowIcon(0) }).addTo(map);
