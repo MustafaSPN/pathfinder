@@ -2,6 +2,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import TimerAction  # <--- 1. BU IMPORT'U EKLE
 
 def generate_launch_description():
     pkg_name = 'rover_bringup'
@@ -15,6 +16,34 @@ def generate_launch_description():
 
     with open(urdf_file, 'r') as infp:
         robot_desc = infp.read()
+
+    # ---------------------------------------------
+    # NAVSAT NODE TANIMINI BURAYA ALDIK (Listenin dışına)
+    # ---------------------------------------------
+    navsat_transform_node = Node(
+        package='robot_localization',
+        executable='navsat_transform_node',
+        name='navsat_transform_node',
+        output='screen',
+        parameters=[navsat_transform_config,
+                    {'yaw_offset': 0.0}], 
+        respawn=True,
+        respawn_delay=4.0,
+        remappings=[
+            ('imu', '/gps/imu'),
+            ('gps/fix', '/fix'),
+            ('odometry/filtered', '/odometry/local')
+        ],
+        arguments=['--ros-args', '--log-level', 'warn']
+    )
+
+    # ---------------------------------------------
+    # GECİKME MEKANİZMASI (TIMER ACTION)
+    # ---------------------------------------------
+    delayed_navsat_transform = TimerAction(
+        period=5.0,  # <-- 5 Saniye Gecikme (GPS ve IMU otursun diye)
+        actions=[navsat_transform_node]
+    )
 
     return LaunchDescription([
         # 1. Robot Modelini Yayınla (URDF)
@@ -38,17 +67,16 @@ def generate_launch_description():
             name='empty_map_publisher',
             output='screen'
         ),
-        # 5. SWEGEO RTK GPS SÜRÜCÜSÜ (Bağımsız Paketten)
+        # 5. SWEGEO RTK GPS SÜRÜCÜSÜ
         Node(
-            package='swegeo_driver',      # <-- Yeni paket adı
-            executable='swegeo_node',    # <-- setup.py'da verdiğimiz isim
+            package='swegeo_driver',
+            executable='swegeo_node',
             name='swegeo_gps_driver',
             output='screen',
             parameters=[{
-                'port': '/dev/ttyUSB0',  # GPS'in bağlı olduğu port (Kontrol et!)
+                'port': '/dev/ttyUSB0',
                 'baudrate': 115200,
                 'ntrip_enable': True,
-                # NTRIP Bilgilerini Buraya Gir:
                 'ntrip_host': '212.156.70.42', 
                 'ntrip_port': 2101,
                 'ntrip_mountpoint': 'VRSRTCM34',
@@ -58,55 +86,35 @@ def generate_launch_description():
         ),
 
         # ---------------------------------------------
-        # 3. LOKAL EKF (Pürüzsüz Sürüş - Odom Frame)
+        # 3. LOKAL EKF 
         # ---------------------------------------------
-        # Girdi: /odom_esp (Tekerlek), /gps/imu (Heading)
-        # Çıktı: /odometry/local
         Node(
             package='robot_localization',
             executable='ekf_node',
-            name='ekf_filter_node_odom', # YAML dosyasındaki başlık ile AYNI OLMALI
+            name='ekf_filter_node_odom',
             output='screen',
             parameters=[ekf_filter_node_odom_config],
             remappings=[
-                ('odometry/filtered', '/odometry/local') # Çıktı topic ismini özelleştiriyoruz
+                ('odometry/filtered', '/odometry/local')
             ]
         ),
+        
         # ---------------------------------------------
-        # 2. NAVSAT TRANSFORM (GPS -> Odometry Çevirici)
+        # 2. NAVSAT TRANSFORM (Buraya artık Node yerine Delayed değişkeni geliyor)
         # ---------------------------------------------
-        # Girdi: /fix (GPS), /gps/imu (Heading)
+        delayed_navsat_transform,  # <--- LİSTEYE NODE DEĞİL, TIMER EKLENDİ
 
-        # Çıktı: /odometry/gps (Metre cinsinden GPS verisi)
-        Node(
-            package='robot_localization',
-            executable='navsat_transform_node',
-            name='navsat_transform_node',          # YAML ile aynı olsun
-            output='screen',
-            parameters=[navsat_transform_config,
-            {'yaw_offset': 0.0}],  # İhtiyaca göre ayarla
-            respawn=True,         # Hata verince tekrar başlat
-            respawn_delay=4.0,    # Çökünce hemen açma, 4 saniye bekle (GPS iyice kendine gelsin)
-            remappings=[
-                ('imu', '/gps/imu'),
-                ('gps/fix', '/fix'),
-                ('odometry/filtered', '/odometry/local')
-                ],
-            arguments=['--ros-args', '--log-level', 'warn']
-        ),
         # ---------------------------------------------
-        # 4. GLOBAL EKF (Harita Konumu - Map Frame)
+        # 4. GLOBAL EKF
         # ---------------------------------------------
-        # Girdi: /odom_esp, /gps/imu, /odometry/gps (Navsat çıktısı)
-        # Çıktı: /odometry/global
         Node(
             package='robot_localization',
             executable='ekf_node',
-            name='ekf_filter_node_map', # YAML dosyasındaki başlık ile AYNI OLMALI
+            name='ekf_filter_node_map',
             output='screen',
             parameters=[ekf_filter_node_map_config],
             remappings=[
-                ('odometry/filtered', '/odometry/global') # Çıktı topic ismini özelleştiriyoruz
+                ('odometry/filtered', '/odometry/global')
             ]
         )
     ])
