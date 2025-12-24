@@ -18,8 +18,8 @@ class EmptyMapPublisher(Node):
         self.publisher_ = self.create_publisher(OccupancyGrid, 'map', qos_policy)
         
         # Harita özelliklerini ayarla
-        self.map_resolution = 0.1  # Her piksel 10cm (0.1 metre)
-        self.map_size_m = 100.0    # 100 metre genişlik
+        self.map_resolution = 0.5  # Her piksel 50cm (0.5 metre)
+        self.map_size_m = 1000.0    # 1000 metre genişlik
         
         # Grid Boyutu (Piksel cinsinden)
         self.grid_width = int(self.map_size_m / self.map_resolution)  # 1000 piksel

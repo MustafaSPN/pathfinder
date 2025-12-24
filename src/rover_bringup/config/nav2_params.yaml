@@ -117,7 +117,7 @@ global_costmap:
       robot_base_frame: base_link
       update_frequency: 2.0
       publish_frequency: 1.0
-      resolution: 0.10
+      resolution: 0.5
       track_unknown_space: false
       rolling_window: false
       always_send_full_costmap: true
@@ -144,7 +144,7 @@ local_costmap:
       rolling_window: true
       width: 20
       height: 20
-      resolution: 0.10
+      resolution: 0.5
       track_unknown_space: false
       always_send_full_costmap: true
       plugins: ["inflation_layer"]
@@ -186,13 +186,13 @@ waypoint_follower:
   ros__parameters:
     use_sim_time: false
     loop_rate: 10
-    stop_on_failure: true
+    stop_on_failure: false
     waypoint_task_executor_plugin: "wait_at_waypoint"
 
     wait_at_waypoint:
       plugin: "nav2_waypoint_follower::WaitAtWaypoint"
-      enabled: true
-      waypoint_pause_duration: 1 # Duraklamayı kaldırdım, akıcı gitsin (İstersen 1 yap)
+      enabled: false
+      waypoint_pause_duration: 1 # Bekleme kapali, akici gitsin
 
 # ==========================
 # VELOCITY SMOOTHER (LIMITOR)
@@ -209,7 +209,7 @@ velocity_smoother:
     # --- HIZ LIMITLERI (0.8 m/s için güncellendi) ---
     # Max hızın üzerine %10 pay bıraktık ki controller limitte takılmasın
     max_velocity: [0.9, 0.0, 1.5] 
-    min_velocity: [-0.2, 0.0, -1.5] # Geri vites limiti artırıldı
+    min_velocity: [0.0, 0.0, -1.5] # Geri vites limiti artırıldı
 
     # İvmelenme (Hıza ulaşması için artırıldı)
     max_accel: [1.0, 0.0, 1.5] 

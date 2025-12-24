@@ -66,9 +66,12 @@ class AutoDatumSetter(Node):
         req.geo_pose.position.longitude = self.latest_fix.longitude
         req.geo_pose.position.altitude = self.latest_fix.altitude
 
-        # 2. Oryantasyonu IMU'dan al
-        # (Bu sayede haritan, robotun açıldığı andaki yönüne hizalanır)
-        req.geo_pose.orientation = self.latest_imu.orientation
+        # 2. Oryantasyonu ENU'ya sabitle (ROS2: East=0 yaw)
+        # Başlangıç yönüne bağlı kalmasın diye map frame'i döndürmüyoruz.
+        req.geo_pose.orientation.x = 0.0
+        req.geo_pose.orientation.y = 0.0
+        req.geo_pose.orientation.z = 0.0
+        req.geo_pose.orientation.w = 1.0
 
         # 3. Asenkron çağrı yap
         future = self.datum_client.call_async(req)
