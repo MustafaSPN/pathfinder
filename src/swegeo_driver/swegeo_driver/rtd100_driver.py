@@ -329,8 +329,8 @@ class rtd100_driver(Node):
             cov = std_rad ** 2
             # self.get_logger().info(f"Heading Std: {heading_std_deg:.2f}°, Cov: {cov:.6f} rad²")
             imu_msg.orientation_covariance = [
-                                                99999.0, 0.0,     0.0,
-                                                0.0,     99999.0, 0.0,
+                                                0.01, 0.0,     0.0,
+                                                0.0,     0.01, 0.0,
                                                 0.0,     0.0,     cov
                                             ]
 

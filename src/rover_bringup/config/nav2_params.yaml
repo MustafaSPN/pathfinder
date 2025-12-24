@@ -1,20 +1,7 @@
 # ==========================================
-# NAV2 PARAMS - Your System (GPS 5Hz + Wheel Odom 10Hz)
-#
-# Frames:
-#   map, odom, base_link
-# TF:
-#   EKF global -> publishes map->odom
-#   EKF local  -> publishes odom->base_link and /odometry/local
-#
-# Topics:
-#   Odom: /odometry/local  (EKF local output)
-#   Map : /map             (OccupancyGrid published by you)
-#
-# Nav Behavior:
-#   - Max forward speed 1.0 m/s
-#   - Waypoint: wait 1 second
-#   - Backup enabled (BT default), but very small reverse
+# NAV2 PARAMS - OPTIMIZED FOR 0.8 m/s
+# System: GPS + Wheel Odom (10Hz) + No Lidar
+# Controller: Regulated Pure Pursuit
 # ==========================================
 
 bt_navigator:
@@ -23,7 +10,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_link
     odom_topic: /odometry/local
-    bt_loop_duration: 10
+    bt_loop_duration: 100
     default_server_timeout: 20
     wait_for_service_timeout: 1000
 
@@ -39,58 +26,62 @@ controller_server:
   ros__parameters:
     use_sim_time: false
 
-    # Wheel odom 10Hz -> Controller 10Hz
+    # Wheel odom 10Hz -> Controller 10Hz (Senkronizasyon için ideal)
     controller_frequency: 10.0
 
     odom_topic: /odometry/local
 
+    # Robot durduğunda titremesini önlemek için thresholdlar
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.0
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 0.5
+    
+    # Hız arttığı için hata toleransını biraz artırdık
+    failure_tolerance: 1.0
 
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["goal_checker"]
     controller_plugins: ["FollowPath"]
     current_goal_checker: "goal_checker"
 
-    # GPS + caster + jitter -> relaxed progress checker
+    # GPS + Dış Mekan için gevşek ilerleme kontrolü
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.05
       movement_time_allowance: 30.0
 
-    # GPS waypoint: yaw ignored at goal, XY tolerance wider
+    # GPS Hedef Toleransları
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
       stateful: true
-      xy_goal_tolerance: 0.5
-      yaw_goal_tolerance: 3.14
+      # 0.8 m/s ile gelen robotun tam nokta durması zordur, 0.6m makul
+      xy_goal_tolerance: 0.6  
+      yaw_goal_tolerance: 3.14 # Yön fark etmez
 
+    # --- PURE PURSUIT AYARLARI (0.8 m/s İçin Optimize Edildi) ---
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
 
-      # Target cruise speed
-      desired_linear_vel: 0.6
+      # HEDEF HIZ
+      desired_linear_vel: 0.8 
 
-      # Lookahead tuning for 0.6 m/s
+      # Lookahead Tuning (Hız arttıkça burası artmalı)
       use_velocity_scaled_lookahead_dist: true
-      lookahead_time: 1.5
-      min_lookahead_dist: 0.6
-      max_lookahead_dist: 1.6
+      lookahead_time: 2.0        # 0.8 m/s * 2.0 sn = 1.6m ilerisine bakar (Stabilite için artırıldı)
+      min_lookahead_dist: 0.8    # Durma mesafesi kadar
+      max_lookahead_dist: 2.5    # Düzlükte daha ileriye baksın
 
-      # Turn-in-place vs smooth arc
-      use_rotate_to_heading: false
-      rotate_to_heading_angular_vel: 0.8
-      max_angular_accel: 2.0
-
-      # Speed regulation on tighter curvature
+      # Ackermann / Araba stili sürüş için False kalmalı
+      use_rotate_to_heading: false 
+      
+      # Virajlarda hız regülasyonu
       use_regulated_linear_velocity_scaling: true
-      regulated_linear_scaling_min_radius: 0.8
-      regulated_linear_scaling_min_speed: 0.35
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.4 # Virajda çok yavaşlamasın (0.4 m/s altına inmez)
 
       allow_reversing: false
-      transform_tolerance: 0.2
+      transform_tolerance: 1.0
+      max_angular_accel: 2.0
 
 planner_server:
   ros__parameters:
@@ -98,12 +89,12 @@ planner_server:
     expected_planner_frequency: 1.0
     planner_plugins: ["GridBased"]
 
-    # For empty-ish map & waypoints, NavFn is enough
+    # Boş haritada engelsiz rota için NavFn ideal
     GridBased:
       plugin: "nav2_navfn_planner/NavfnPlanner"
       tolerance: 2.0
       use_astar: false
-      allow_unknown: true
+      allow_unknown: true # Haritanın boş yerlerinden geçebilmesi için ŞART
 
 smoother_server:
   ros__parameters:
@@ -116,7 +107,7 @@ smoother_server:
       do_refinement: true
 
 # ==========================
-# COSTMAPS (Map from /map topic)
+# COSTMAPS
 # ==========================
 global_costmap:
   global_costmap:
@@ -124,14 +115,12 @@ global_costmap:
       use_sim_time: false
       global_frame: map
       robot_base_frame: base_link
-
       update_frequency: 2.0
       publish_frequency: 1.0
       resolution: 0.10
       track_unknown_space: false
       rolling_window: false
       always_send_full_costmap: true
-
       plugins: ["static_layer", "inflation_layer"]
 
       static_layer:
@@ -141,7 +130,7 @@ global_costmap:
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.4
+        inflation_radius: 0.5 # Biraz artırıldı (Güvenlik)
         cost_scaling_factor: 3.0
 
 local_costmap:
@@ -150,7 +139,6 @@ local_costmap:
       use_sim_time: false
       global_frame: odom
       robot_base_frame: base_link
-
       update_frequency: 5.0
       publish_frequency: 2.0
       rolling_window: true
@@ -159,16 +147,15 @@ local_costmap:
       resolution: 0.10
       track_unknown_space: false
       always_send_full_costmap: true
-
       plugins: ["inflation_layer"]
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.4
+        inflation_radius: 0.5
         cost_scaling_factor: 3.0
 
 # ==========================
-# BEHAVIORS (BT default needs backup)
+# BEHAVIORS
 # ==========================
 behavior_server:
   ros__parameters:
@@ -176,7 +163,6 @@ behavior_server:
     global_frame: map
     robot_base_frame: base_link
     odom_topic: /odometry/local
-
     behavior_plugins: ["spin", "backup", "wait"]
 
     spin:
@@ -186,15 +172,15 @@ behavior_server:
 
     backup:
       plugin: "nav2_behaviors/BackUp"
-      backup_dist: 0.15
-      backup_speed: 0.05
+      backup_dist: 0.20  # Biraz daha fazla geri gitsin
+      backup_speed: 0.1  # Geri gitme hızı artırıldı
       time_allowance: 10.0
 
     wait:
       plugin: "nav2_behaviors/Wait"
 
 # ==========================
-# WAYPOINT FOLLOWER (wait 1 sec)
+# WAYPOINT FOLLOWER
 # ==========================
 waypoint_follower:
   ros__parameters:
@@ -206,10 +192,10 @@ waypoint_follower:
     wait_at_waypoint:
       plugin: "nav2_waypoint_follower::WaitAtWaypoint"
       enabled: true
-      waypoint_pause_duration: 1
+      waypoint_pause_duration: 1 # Duraklamayı kaldırdım, akıcı gitsin (İstersen 1 yap)
 
 # ==========================
-# VELOCITY SMOOTHER
+# VELOCITY SMOOTHER (LIMITOR)
 # ==========================
 velocity_smoother:
   ros__parameters:
@@ -217,23 +203,23 @@ velocity_smoother:
     smoothing_frequency: 10.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-
     odom_topic: /odometry/local
     odom_duration: 0.2
 
-    # forward max 1.0, reverse limited (for backup only)
-    max_velocity: [ 0.6, 0.0,  1.2]
-    min_velocity: [-0.1, 0.0, -1.2]
+    # --- HIZ LIMITLERI (0.8 m/s için güncellendi) ---
+    # Max hızın üzerine %10 pay bıraktık ki controller limitte takılmasın
+    max_velocity: [0.9, 0.0, 1.5] 
+    min_velocity: [-0.2, 0.0, -1.5] # Geri vites limiti artırıldı
 
-    max_accel: [0.8, 0.0, 1.2]
-    max_decel: [-1.0, 0.0, -1.5]
+    # İvmelenme (Hıza ulaşması için artırıldı)
+    max_accel: [1.0, 0.0, 1.5] 
+    max_decel: [-1.5, 0.0, -2.0] # Frenleme her zaman ivmelenmeden güçlü olmalı
 
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 2.0
 
 # ==========================
 # LIFECYCLE
-# (No map_server because /map is published by you)
 # ==========================
 lifecycle_manager:
   ros__parameters:

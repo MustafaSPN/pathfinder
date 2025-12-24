@@ -30,6 +30,7 @@ setup(
         'console_scripts': [
             # Eski node varsa kalsın, altına bunu ekle:
             'empty_map_pub = rover_bringup.empty_map:main',
+            'set_datum_auto = rover_bringup.set_datum_auto:main',
         ],
     },
 )

@@ -37,13 +37,7 @@ def generate_launch_description():
         arguments=['--ros-args', '--log-level', 'warn']
     )
 
-    # ---------------------------------------------
-    # GECİKME MEKANİZMASI (TIMER ACTION)
-    # ---------------------------------------------
-    delayed_navsat_transform = TimerAction(
-        period=5.0,  # <-- 5 Saniye Gecikme (GPS ve IMU otursun diye)
-        actions=[navsat_transform_node]
-    )
+   
 
     return LaunchDescription([
         # 1. Robot Modelini Yayınla (URDF)
@@ -65,6 +59,12 @@ def generate_launch_description():
             package='rover_bringup',
             executable='empty_map_pub',
             name='empty_map_publisher',
+            output='screen'
+        ),
+        Node(
+            package='rover_bringup',
+            executable='set_datum_auto',
+            name='set_datum_auto',
             output='screen'
         ),
         # 5. SWEGEO RTK GPS SÜRÜCÜSÜ
@@ -99,10 +99,22 @@ def generate_launch_description():
             ]
         ),
         
-        # ---------------------------------------------
-        # 2. NAVSAT TRANSFORM (Buraya artık Node yerine Delayed değişkeni geliyor)
-        # ---------------------------------------------
-        delayed_navsat_transform,  # <--- LİSTEYE NODE DEĞİL, TIMER EKLENDİ
+        Node(
+        package='robot_localization',
+        executable='navsat_transform_node',
+        name='navsat_transform_node',
+        output='screen',
+        parameters=[navsat_transform_config,
+                    {'yaw_offset': 0.0}], 
+        respawn=True,
+        respawn_delay=4.0,
+        remappings=[
+            ('imu', '/gps/imu'),
+            ('gps/fix', '/fix'),
+            ('odometry/filtered', '/odometry/local')
+        ],
+        arguments=['--ros-args', '--log-level', 'warn']
+        ),  
 
         # ---------------------------------------------
         # 4. GLOBAL EKF
