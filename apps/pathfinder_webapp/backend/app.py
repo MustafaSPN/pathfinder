@@ -21,8 +21,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist,PoseStamped
 from nav2_msgs.action import FollowWaypoints
 from visualization_msgs.msg import Marker, MarkerArray
-# (Mission endpointi şimdilik placeholder)
-# from nav2_msgs.action import FollowWaypoints
+from nav2_msgs.action import NavigateThroughPoses
 
 FRONTEND_DIR = (Path(__file__).parent.parent / "frontend").resolve()
 
@@ -87,7 +86,8 @@ class WebBridgeNode(Node):
         self.create_subscription(Odometry, self.odom_topic, self._on_odom, 10)
         self.create_subscription(Imu, self.heading_topic, self._on_heading, 10)  # just to keep the topic alive
         self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
-        self._nav_client = ActionClient(self, FollowWaypoints, 'follow_waypoints')
+        # self._nav_client = ActionClient (self,FollowWaypoints,'follow_waypoints')
+        self._nav_client = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses')
         self._current_goal_handle = None
 
         # Emergency stop state: when True publish zero cmd_vel continuously
@@ -354,8 +354,8 @@ class WebBridgeNode(Node):
         self.get_logger().info(f"{len(waypoints)} noktalı görev hazırlanıyor...")
 
         # BURADA FollowWaypoints KULLANIYORUZ
-        goal_msg = FollowWaypoints.Goal()
-        
+        goal_msg = NavigateThroughPoses.Goal()
+        # goal_msg = FollowWaypoints.Goal()
         # 2. Tüm noktaları dönüştür
         valid_points = 0
         for i, wp in enumerate(waypoints):
