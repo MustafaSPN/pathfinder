@@ -816,7 +816,8 @@ Example:
       setTimeout(() => map.invalidateSize(), 100);
   });
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
+    maxZoom: 21,
+    maxNativeZoom: 19,
     attribution: "&copy; OpenStreetMap"
   }).addTo(map);
 
@@ -855,6 +856,9 @@ Example:
   // Trace line
   let trace = [];
   const traceLine = L.polyline([], { weight: 3, opacity: 0.85 }).addTo(map);
+
+  // Nav2 Plan Path (Red Line)
+  const navPathLine = L.polyline([], { weight: 4, color: '#ef4444', opacity: 0.8, dashArray: '10, 6' }).addTo(map);
 
   // Waypoints layer
   const wpLayer = L.layerGroup().addTo(map);
@@ -1089,6 +1093,11 @@ Example:
       if (trace.length > 800) trace = trace.slice(-800);
     }
     traceLine.setLatLngs(trace.map(p => [p.lat, p.lon]));
+
+    // Update Nav2 Path
+    if (Array.isArray(msg.path)) {
+      navPathLine.setLatLngs(msg.path.map(p => [p.lat, p.lon]));
+    }
     // Trace handling (mevcut kodunuz)
     if (Array.isArray(msg.trace)) {
       trace = msg.trace.slice(-800);
@@ -1124,10 +1133,15 @@ Example:
     log("I", "Centered map on robot.");
   };
 
-  $("clearTraceBtn").onclick = () => {
-    trace = [];
-    traceLine.setLatLngs([]);
-    log("W", "Cleared trace.");
+  $("clearTraceBtn").onclick = async () => {
+    try {
+      trace = [];
+      traceLine.setLatLngs([]);
+      await postJSON("/api/clear_trace", {});
+      log("W", "Cleared trace on backend.");
+    } catch (e) {
+      log("E", `Failed to clear trace: ${e.message}`);
+    }
   };
 
   $("sendBtn").onclick = async () => {

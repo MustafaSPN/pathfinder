@@ -19,6 +19,8 @@ navsat_transform:
     base_link_frame: base_link
 
     # Inputs
+    gps_frame: gps_link
+    imu_frame: gps_link
     gps_topic: /fix
     imu_topic: /gps/imu
     odometry_topic: /odometry/local

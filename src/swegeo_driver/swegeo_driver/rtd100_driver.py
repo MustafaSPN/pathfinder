@@ -16,7 +16,7 @@ class rtd100_driver(Node):
         # --- AYARLAR ---
         self.declare_parameter('port', '/dev/ttyUSB0')
         self.declare_parameter('baudrate', 115200)
-        self.declare_parameter('frame_id', 'base_link')
+        self.declare_parameter('frame_id', 'gps_link')
         
         # NTRIP Ayarları
         self.declare_parameter('ntrip_enable', False)
@@ -255,14 +255,28 @@ class rtd100_driver(Node):
                         lat_std, lon_std, hgt_std = lat_std2, lon_std2, (hgt_std2 if hgt_std2 is not None else 5.0)
 
             # Fallback: std bulamazsak makul bir şey koy
-                if lat_std is None or lon_std is None:
-                    # RTK_FIXED ise çok küçük, değilse daha büyük
-                    if pos_type == "RTK_FIXED":
-                        lat_std, lon_std, hgt_std = 0.02, 0.02, 0.05
-                    elif pos_type == "RTK_FLOAT":
-                        lat_std, lon_std, hgt_std = 0.20, 0.20, 0.50
-                    else:
-                        lat_std, lon_std, hgt_std = 2.0, 2.0, 5.0
+            if lat_std is None or lon_std is None:
+                # RTK_FIXED ise çok küçük, değilse daha büyük
+                if pos_type == "RTK_FIXED":
+                    lat_std, lon_std, hgt_std = 0.02, 0.02, 0.05
+                elif pos_type == "RTK_FLOAT":
+                    lat_std, lon_std, hgt_std = 0.20, 0.20, 0.50
+                else:
+                    lat_std, lon_std, hgt_std = 2.0, 2.0, 5.0
+
+            if hgt_std is None:
+                hgt_std = 5.0
+
+            # Avoid zero/tiny std devs that make the filter overconfident.
+            if "FIX" in pos_type or "INT" in pos_type:
+                min_std = 0.02
+            elif "FLOAT" in pos_type:
+                min_std = 0.20
+            else:
+                min_std = 1.00
+            lat_std = max(abs(float(lat_std)), min_std)
+            lon_std = max(abs(float(lon_std)), min_std)
+            hgt_std = max(abs(float(hgt_std)), min_std * 2.5)
 
             # NavSatFix oluştur
             ros_msg = NavSatFix()
@@ -272,15 +286,22 @@ class rtd100_driver(Node):
             ros_msg.longitude = float(longitude)
             ros_msg.altitude = float(height)
             
-            # status mapping
-            if pos_type == "RTK_FIXED":
+            # RTK Fixed Modes
+            if pos_type in ["L1_INT", "WIDE_INT", "NARROW_INT", "RTK_DIRECT_INS", "INS_RTKFIXED", "PPP"]:
                 ros_msg.status.status = NavSatStatus.STATUS_GBAS_FIX
-            elif pos_type == "RTK_FLOAT":
+            # RTK Float Modes
+            elif pos_type in ["FLOATCONV", "WIDELANE", "NARROWLANE", "L1_FLOAT", "IONOFREE_FLOAT", "NARROW_FLOAT", "INS_RTKFLOAT", "PPP_CONVERGING"]:
                 ros_msg.status.status = NavSatStatus.STATUS_SBAS_FIX
+            # Single / DGPS Modes
+            elif pos_type in ["SINGLE", "PSRDIFF", "WAAS", "INS_SBAS", "INS_PSRSP", "INS_PSRDIFF", "PROPAGATED"]:
+                ros_msg.status.status = NavSatStatus.STATUS_FIX
+            elif pos_type == "NONE":
+                 ros_msg.status.status = NavSatStatus.STATUS_NO_FIX
             else:
+                # Fallback
                 ros_msg.status.status = NavSatStatus.STATUS_FIX
             ros_msg.status.service = NavSatStatus.SERVICE_GPS
-
+            
             cov_lat = float(lat_std) ** 2
             cov_lon = float(lon_std) ** 2
             cov_alt = float(hgt_std) ** 2
@@ -291,7 +312,6 @@ class rtd100_driver(Node):
                 0.0,    0.0,    cov_alt
             ]
             ros_msg.position_covariance_type = NavSatFix.COVARIANCE_TYPE_DIAGONAL_KNOWN
-
             self.fix_pub.publish(ros_msg)
 
         except Exception as e:
@@ -317,7 +337,7 @@ class rtd100_driver(Node):
 
             imu_msg = Imu()
             imu_msg.header.stamp = self.get_clock().now().to_msg()
-            imu_msg.header.frame_id = "base_link" 
+            imu_msg.header.frame_id = self.frame_id
 
             imu_msg.orientation.x = 0.0
             imu_msg.orientation.y = 0.0

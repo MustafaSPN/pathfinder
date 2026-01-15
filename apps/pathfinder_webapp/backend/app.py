@@ -14,14 +14,15 @@ from rclpy.action import ActionClient
 import time
 
 
-from robot_localization.srv import FromLL
+from robot_localization.srv import FromLL, ToLL
 from geographic_msgs.msg import GeoPoint 
 from sensor_msgs.msg import NavSatFix,Imu,NavSatStatus
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path as NavPath
 from geometry_msgs.msg import Twist,PoseStamped
-from nav2_msgs.action import FollowWaypoints
-from visualization_msgs.msg import Marker, MarkerArray
 from nav2_msgs.action import NavigateThroughPoses
+from visualization_msgs.msg import Marker, MarkerArray
+# (Mission endpointi şimdilik placeholder)
+# from nav2_msgs.action import FollowWaypoints
 
 FRONTEND_DIR = (Path(__file__).parent.parent / "frontend").resolve()
 
@@ -63,13 +64,17 @@ class WebBridgeNode(Node):
         self.cmd_vel_topic = self.declare_parameter("cmd_vel_topic", "/cmd_vel_stop").value
         self.heading_topic = self.declare_parameter("heading_topic", "/gps/imu").value
         self.fromll_client = self.create_client(FromLL, '/fromLL')
+        self.toll_client = self.create_client(ToLL, '/toLL')
         self.marker_pub = self.create_publisher(MarkerArray, '/waypoint_markers', 10)
-        self.get_logger().info("FromLL Service Client initialized.")
+        self.get_logger().info("FromLL and ToLL Service Clients initialized.")
         self._lat: Optional[float] = None
         self._lon: Optional[float] = None
         self._heading_deg: float = 0.0
         self._vx: float = 0.0
         self._vyaw: float = 0.0
+
+        # Nav2 Path storage
+        self._current_path_ll: List[Dict[str, float]] = []
 
         # GPS status tracking (NavSatFix.status)
         self._gps_status_code: Optional[int] = None
@@ -85,8 +90,8 @@ class WebBridgeNode(Node):
         self.create_subscription(NavSatFix, self.gps_topic, self._on_gps, 10)
         self.create_subscription(Odometry, self.odom_topic, self._on_odom, 10)
         self.create_subscription(Imu, self.heading_topic, self._on_heading, 10)  # just to keep the topic alive
+        self.create_subscription(NavPath, '/plan', self._on_plan, 10)
         self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
-        # self._nav_client = ActionClient (self,FollowWaypoints,'follow_waypoints')
         self._nav_client = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses')
         self._current_goal_handle = None
 
@@ -177,6 +182,65 @@ class WebBridgeNode(Node):
         self._vx = float(msg.twist.twist.linear.x)
         self._vyaw = float(msg.twist.twist.angular.z)
 
+    def _on_plan(self, msg: NavPath):
+        """Callback for Nav2 global plan updates."""
+        # Safe way to bridge ROS callback thread -> asyncio loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                 asyncio.run_coroutine_threadsafe(self._process_plan(msg), loop)
+            else:
+                # Fallback if loop logic is tricky (rare case in FastAPI app context)
+                pass
+        except Exception:
+            # If no loop is found in this context, we might skip
+            pass
+
+    async def _process_plan(self, msg: NavPath):
+        if not self.toll_client.service_is_ready():
+            return
+
+        points = msg.poses
+        if not points:
+            self._current_path_ll = []
+            return
+
+        # Downsample: Take every 10th point to reduce service calls
+        # Adjust step size based on path length if needed
+        step = 15
+        downsampled = points[::step]
+        # Always include the last point
+        if points[-1] not in downsampled:
+            downsampled.append(points[-1])
+
+        new_path_ll = []
+
+        # We need to process these sequentially or in batches.
+        # Making 50-100 service calls might be slow but it's the safest way
+        # without duplicating robot_localization logic.
+
+        for pose in downsampled:
+            req = ToLL.Request()
+            req.map_point.x = pose.pose.position.x
+            req.map_point.y = pose.pose.position.y
+            req.map_point.z = 0.0 # Assuming 2D plan on ground
+
+            future = self.toll_client.call_async(req)
+            # Polling wait
+            while not future.done():
+                await asyncio.sleep(0.005)
+
+            try:
+                res = future.result()
+                new_path_ll.append({
+                    "lat": res.ll_point.latitude,
+                    "lon": res.ll_point.longitude
+                })
+            except Exception as e:
+                self.get_logger().warn(f"ToLL service failed for point: {e}")
+
+        self._current_path_ll = new_path_ll
+
     def _gps_status_text(self, code: Optional[int]) -> str:
         if code is None:
             return "UNKNOWN"
@@ -187,6 +251,11 @@ class WebBridgeNode(Node):
              2: "GBAS_FIX",
         }
         return mapping.get(code, f"CODE:{code}")
+
+    def clear_trace(self):
+        """Clears the stored trace history."""
+        self._trace = []
+        self.get_logger().info("Trace history cleared.")
 
     def telemetry(self) -> Dict[str, Any]:
         lat = self._lat if self._lat is not None else 0.0
@@ -218,6 +287,7 @@ class WebBridgeNode(Node):
             },
             "mission_state": self._mission_state,
             "trace": self._trace[-600:],
+            "path": self._current_path_ll,
         }
 
     def emergency_stop(self):
@@ -348,14 +418,14 @@ class WebBridgeNode(Node):
         """
         # 1. Action Client Kontrolü
         if not self._nav_client.wait_for_server(timeout_sec=2.0):
-            self.get_logger().error("Nav2 Action Server (/follow_waypoints) bulunamadı!")
+            self.get_logger().error("Nav2 Action Server (/navigate_through_poses) bulunamadı!")
             raise RuntimeError("Nav2 sistemi hazır değil. (Simülasyon veya Robot açık mı?)")
 
         self.get_logger().info(f"{len(waypoints)} noktalı görev hazırlanıyor...")
 
-        # BURADA FollowWaypoints KULLANIYORUZ
+        # BURADA NavigateThroughPoses KULLANIYORUZ
         goal_msg = NavigateThroughPoses.Goal()
-        # goal_msg = FollowWaypoints.Goal()
+        
         # 2. Tüm noktaları dönüştür
         valid_points = 0
         for i, wp in enumerate(waypoints):
@@ -503,4 +573,11 @@ async def api_mission(payload: Dict[str, Any]):
 @app.post("/api/cancel")
 async def api_cancel():
     await ros_node.cancel_mission()
+    return {"ok": True}
+
+
+@app.post("/api/clear_trace")
+async def api_clear_trace():
+    if ros_node:
+        ros_node.clear_trace()
     return {"ok": True}

@@ -38,12 +38,12 @@ controller_server:
     odom_topic: /odometry/local
 
     # Robot durduğunda titremesini önlemek için thresholdlar
-    min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.0
-    min_theta_velocity_threshold: 0.001
+    min_x_velocity_threshold: 0.005
+    min_y_velocity_threshold: 0.005
+    min_theta_velocity_threshold: 0.005
     
     # Hız arttığı için hata toleransını biraz artırdık
-    failure_tolerance: 1.0
+    failure_tolerance: 5.0
 
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["goal_checker"]
@@ -61,7 +61,7 @@ controller_server:
       plugin: "nav2_controller::SimpleGoalChecker"
       stateful: true
       # 0.8 m/s ile gelen robotun tam nokta durması zordur, 0.6m makul
-      xy_goal_tolerance: 0.3  
+      xy_goal_tolerance: 0.3
       yaw_goal_tolerance: 3.14 # Yön fark etmez
 
     # --- PURE PURSUIT AYARLARI (0.8 m/s İçin Optimize Edildi) ---
@@ -70,16 +70,18 @@ controller_server:
 
       # HEDEF HIZ
       desired_linear_vel: 0.8 
-
+      max_angular_vel: 1.0
       # Lookahead Tuning (Hız arttıkça burası artmalı)
       use_velocity_scaled_lookahead_dist: true
       lookahead_time: 1.5        # 0.8 m/s * 1.5 sn = 1.2m ilerisine bakar (Stabilite için artırıldı)
-      min_lookahead_dist: 0.8    # Durma mesafesi kadar
+      min_lookahead_dist: 1.0    # Durma mesafesi kadar
       max_lookahead_dist: 2.0    # Düzlükte daha ileriye baksın
 
       # Ackermann / Araba stili sürüş için False kalmalı
-      use_rotate_to_heading: false 
-      
+      use_rotate_to_heading: true 
+      rotate_to_heading_vel: 1.0
+      rotate_to_heading_min_angle: 0.785
+
       # Virajlarda hız regülasyonu
       use_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 0.9
@@ -87,7 +89,7 @@ controller_server:
 
       allow_reversing: false
       transform_tolerance: 1.0
-      max_angular_accel: 2.0
+      max_angular_accel: 1.0
 
 planner_server:
   ros__parameters:
@@ -178,8 +180,8 @@ behavior_server:
 
     backup:
       plugin: "nav2_behaviors/BackUp"
-      backup_dist: 0.20  # Biraz daha fazla geri gitsin
-      backup_speed: 0.1  # Geri gitme hızı artırıldı
+      backup_dist: 0.50  # Biraz daha fazla geri gitsin
+      backup_speed: 0.5  # Geri gitme hızı artırıldı
       time_allowance: 10.0
 
     wait:
@@ -214,12 +216,12 @@ velocity_smoother:
 
     # --- HIZ LIMITLERI (0.8 m/s için güncellendi) ---
     # Max hızın üzerine %10 pay bıraktık ki controller limitte takılmasın
-    max_velocity: [0.9, 0.0, 1.5] 
-    min_velocity: [0.0, 0.0, -1.5] # Geri vites limiti artırıldı
+    max_velocity: [0.9, 0.0, 1.0] 
+    min_velocity: [0.0, 0.0, -1.0] # Geri vites limiti artırıldı
 
     # İvmelenme (Hıza ulaşması için artırıldı)
-    max_accel: [1.0, 0.0, 1.5] 
-    max_decel: [-1.5, 0.0, -2.0] # Frenleme her zaman ivmelenmeden güçlü olmalı
+    max_accel: [1.0, 0.0, 1.0] 
+    max_decel: [-1.5, 0.0, -1.0] # Frenleme her zaman ivmelenmeden güçlü olmalı
 
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 2.0
