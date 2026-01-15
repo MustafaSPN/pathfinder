@@ -1,3 +1,4 @@
 [submodule "esp32-controller"]
 	path = esp32-controller
 	url = https://github.com/MustafaSPN/esp32-roboclaw-rover-controller.git
+	branch = main
